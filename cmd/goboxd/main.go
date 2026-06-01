@@ -5,12 +5,23 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/thesouldev/goboxd/internal/api"
+	"github.com/thesouldev/goboxd/internal/config"
 )
 
 func main() {
 	App := fiber.New()
 
-	api.RegisterRoutes(App)
+	cfg, err := config.Load("languages.yaml")
+	if err != nil {
+		log.Fatal("Error loading config: ", err)
+	}
 
-	log.Fatal(App.Listen(":8080"))
+	api.RegisterRoutes(App, cfg)
+
+	log.Println("Starting server on port 8080...")
+
+	err = App.Listen(":8080")
+	if err != nil {
+		log.Fatal("Server error: ", err)
+	}
 }

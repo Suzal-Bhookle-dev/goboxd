@@ -17,3 +17,6 @@ integration:
 
 lint:
 	$(TOOLS) golangci-lint run ./...
+
+bench:
+	$(TOOLS) go test -bench=. -benchmem ./internal/sandbox/...

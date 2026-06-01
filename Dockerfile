@@ -33,6 +33,13 @@ FROM debian:${DEBIAN_VERSION}-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates libnl-route-3-200 libprotobuf32 \
     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY languages.yaml .
+
+COPY scripts/ ./scripts/
+RUN chmod +x ./scripts/install.sh && ./scripts/install.sh
+
 COPY --from=nsjail-builder /usr/local/bin/nsjail /usr/local/bin/nsjail
 COPY --from=builder        /out/goboxd          /usr/local/bin/goboxd
 EXPOSE 8080

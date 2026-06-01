@@ -9,6 +9,12 @@ import (
 	"github.com/thesouldev/goboxd/internal/models"
 )
 
+const (
+	MaxSourceSize = 256 * 1024
+	MaxTests      = 50
+	MaxStdinSize  = 64 * 1024
+)
+
 func (h *Handler) ValidateRequest(req *models.RunRequest) *models.ErrorResponse {
 	lang, exists := h.Cfg.GetLanguage(req.Language)
 	if !exists {
@@ -42,6 +48,16 @@ func (h *Handler) ValidateRequest(req *models.RunRequest) *models.ErrorResponse 
 
 	if len(req.Tests) == 0 {
 		return errRes("missing_tests", "At least one test case is required")
+	}
+
+	if len(req.Tests) > MaxTests {
+		return errRes("too_many_tests", "Maximum test count exceeded")
+	}
+
+	for _, tc := range req.Tests {
+		if len(tc.Stdin) > MaxStdinSize {
+			return errRes("stdin_too_large", "Stdin exceeds 64 KiB limit")
+		}
 	}
 
 	return nil

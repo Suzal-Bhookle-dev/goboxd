@@ -1,7 +1,6 @@
 package sandbox
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,90 +11,123 @@ import (
 )
 
 func Execute(req models.RunRequest, lang config.Language) (models.RunResponse, error) {
-	tmpdir, err := os.MkdirTemp("", "/goboxd-run-")
+	tmpDir, err := os.MkdirTemp("", "gobox-")
 	if err != nil {
-		return models.RunResponse{}, fmt.Errorf("failed to create sandbox dir: %w", err)
+		return models.RunResponse{}, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	srcFile := lang.SourceFilename
+	if lang.SourceFilenameStrategy == "from_request" && req.SourceFilename != "" {
+		srcFile = req.SourceFilename
 	}
 
-	defer os.RemoveAll(tmpdir)
-
-	sourceFilename := req.SourceFilename
-	if sourceFilename == "" {
-		sourceFilename = lang.SourceFilename
+	artFile := lang.Artifact
+	if lang.ArtifactFilenameStrategy == "from_request" && req.ArtifactFilename != "" {
+		artFile = req.ArtifactFilename
 	}
 
-	artifactFilename := req.ArtifactFilename
-	if artifactFilename == "" {
-		artifactFilename = lang.Artifact
+	err = os.WriteFile(filepath.Join(tmpDir, srcFile), []byte(req.Source), 0o644)
+	if err != nil {
+		return models.RunResponse{}, err
 	}
 
-	sourcePath := filepath.Join(tmpdir, sourceFilename)
-	if err := os.WriteFile(sourcePath, []byte(req.Source), 0o644); err != nil {
-		return models.RunResponse{}, fmt.Errorf("failed to write source file: %w", err)
-	}
-
-	response := models.RunResponse{
-		Status: "ok",
-		Tests:  []models.TestResult{},
-	}
+	var response models.RunResponse
 
 	if lang.Build != nil {
-		buildStart := time.Now()
-
-		userFlags := ""
+		start := time.Now()
+		uFlags := ""
 		if req.Build != nil {
-			userFlags = strings.Join(req.Build.Flags, " ")
+			uFlags = strings.Join(req.Build.Flags, " ")
 		}
 
-		args := replacePlaceholders(lang.Build.Args, sourceFilename, artifactFilename, userFlags)
+		buildCmd := replaceString(lang.Build.Cmd, srcFile, artFile, uFlags)
+		args := replacePlaceholders(lang.Build.Args, srcFile, artFile, uFlags)
 
-		buildLimits := mergeLimits(req.Build, lang.Build.Limits)
+		res, err := runInNsjail(tmpDir, mergeLimits(req.Build, lang.Build.Limits), "", buildCmd, args...)
 
-		res, err := runInNsjail(tmpDir, buildLimits, "", lang.Build.Cmd, args...)
+		bStatus := "ok"
+		if err != nil {
+			bStatus = "internal_error"
+		} else if res.ExitCode != 0 {
+			bStatus = "failed"
+		}
 
 		response.Build = &models.StepResult{
-			Status:     "ok",
+			Status:     bStatus,
 			Stdout:     res.Stdout,
 			Stderr:     res.Stderr,
-			DurationMs: time.Since(buildStart).Milliseconds(),
+			DurationMs: time.Since(start).Milliseconds(),
 		}
 
-		if err != nil || res.ExitCode != 0 {
-			response.Build.Status = "error"
+		if bStatus != "ok" {
 			response.Status = "build_failed"
+			for range req.Tests {
+				response.Tests = append(response.Tests, models.TestResult{Status: "not_executed"})
+			}
 			return response, nil
 		}
 	}
 
+	firstFailureStatus := ""
 	for _, tc := range req.Tests {
-		runStart := time.Now()
+		start := time.Now()
 
-		runArgs := replacePlaceholders(lang.Run.Args, sourceFilename, artifactFilename, "")
+		runCmd := replaceString(lang.Run.Cmd, srcFile, artFile, "")
+		args := replacePlaceholders(lang.Run.Args, srcFile, artFile, "")
 
-		runLimits := mergeLimits(req.Run, lang.Run.Limits)
+		res, err := runInNsjail(tmpDir, mergeLimits(req.Run, lang.Run.Limits), tc.Stdin, runCmd, args...)
 
-		res, _ := runInNsjail(tmpDir, runLimits, tc.Stdin, lang.Run.Cmd, runArgs...)
+		tStatus := "accepted"
 
-		testStatus := "ok"
-		if strings.TrimSpace(res.Stdout) != strings.TrimSpace(tc.ExpectedStdout) {
-			testStatus = "wrong_output"
-			response.Status = "wrong_output"
+		if err != nil {
+			tStatus = "internal_error"
+		} else if res.TimedOut {
+			tStatus = "time_exceeded"
+		} else if res.ExitCode != 0 {
+			tStatus = "runtime_error"
+		} else {
+			tStatus = compareOutput(res.Stdout, tc.ExpectedStdout)
 		}
-		if res.TimedOut {
-			testStatus = "time_limit_exceeded"
-			response.Status = "error"
+
+		if firstFailureStatus == "" && tStatus != "accepted" {
+			firstFailureStatus = tStatus
 		}
 
 		response.Tests = append(response.Tests, models.TestResult{
-			Status:       testStatus,
+			Status:       tStatus,
 			Stdout:       res.Stdout,
 			Stderr:       res.Stderr,
-			DurationMs:   time.Since(runStart).Milliseconds(),
+			DurationMs:   time.Since(start).Milliseconds(),
 			MemoryPeakKb: res.MemoryKb,
 		})
 	}
 
+	if firstFailureStatus != "" {
+		response.Status = firstFailureStatus
+	} else {
+		response.Status = "accepted"
+	}
+
 	return response, nil
+}
+
+func compareOutput(actual, expected string) string {
+	if actual == expected {
+		return "accepted"
+	}
+	if strings.TrimSpace(actual) == strings.TrimSpace(expected) {
+		return "output_whitespace_mismatch"
+	}
+
+	simplify := func(s string) string {
+		return strings.Join(strings.Fields(s), "")
+	}
+	if simplify(actual) == simplify(expected) {
+		return "output_whitespace_mismatch"
+	}
+
+	return "wrong_output"
 }
 
 func mergeLimits(reqStep *models.StepConfig, defaults config.Limits) models.Limits {
@@ -130,4 +162,13 @@ func replacePlaceholders(args []string, source, artifact, flags string) []string
 		out[i] = replacer.Replace(arg)
 	}
 	return out
+}
+
+func replaceString(target, source, artifact, flags string) string {
+	replacer := strings.NewReplacer(
+		"{{source}}", source,
+		"{{artifact}}", artifact,
+		"{{flags}}", flags,
+	)
+	return replacer.Replace(target)
 }

@@ -19,12 +19,17 @@ type Result struct {
 
 func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string, args ...string) (Result, error) {
 	nsjailArgs := []string{
+		"-Q",
 		"-Mo",
 		"--chroot", "/",
+		"--cwd", "/run",
+		"-E", "PATH=/usr/bin:/bin:/usr/local/bin",
 		"-R", "/usr",
 		"-R", "/lib",
 		"-R", "/lib64",
 		"-R", "/bin",
+		"-R", "/etc",
+		"-T", "/tmp",
 		"-B", workDir + ":/run",
 		"--user", "99999",
 		"--group", "99999",
@@ -44,9 +49,15 @@ func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string
 	err := cmd.Run()
 
 	exitCode := 0
+	timedOut := false
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
+			if exitCode == 137 || strings.Contains(err.Error(), "signal: killed") {
+				timedOut = true
+			}
+		} else {
+			return Result{}, err
 		}
 	}
 
@@ -54,5 +65,6 @@ func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string
 		Stdout:   outB.String(),
 		Stderr:   errB.String(),
 		ExitCode: exitCode,
+		TimedOut: timedOut,
 	}, nil
 }

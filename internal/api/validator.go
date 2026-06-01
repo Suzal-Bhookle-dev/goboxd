@@ -6,7 +6,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/thesouldev/goboxd/internal/config"
 	"github.com/thesouldev/goboxd/internal/models"
 )
 

@@ -20,13 +20,14 @@ type StepConfig struct {
 }
 
 type Language struct {
-	ID                     string      `yaml:"id"`
-	Name                   string      `yaml:"name"`
-	SourceFilename         string      `yaml:"source_filename"`
-	SourceFilenameStrategy string      `yaml:"source_filename_strategy"`
-	Artifact               string      `yaml:"artifact"`
-	Build                  *StepConfig `yaml:"build,omitempty"`
-	Run                    StepConfig  `yaml:"run"`
+	ID                       string      `yaml:"id"`
+	Name                     string      `yaml:"name"`
+	SourceFilename           string      `yaml:"source_filename"`
+	SourceFilenameStrategy   string      `yaml:"source_filename_strategy"`
+	Artifact                 string      `yaml:"artifact"`
+	ArtifactFilenameStrategy string      `yaml:"artifact_filename_strategy"`
+	Build                    *StepConfig `yaml:"build,omitempty"`
+	Run                      StepConfig  `yaml:"run"`
 }
 
 type Config struct {

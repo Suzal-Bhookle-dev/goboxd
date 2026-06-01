@@ -49,6 +49,7 @@ make run          # start the service on :8080
 make test         # run unit tests
 make integration  # run end to end tests
 make lint         # run static analysis
+make bench        # run benchmarking
 ```
 
 ## Project structure

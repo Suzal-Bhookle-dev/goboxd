@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/thesouldev/goboxd/internal/models"
 )
@@ -17,10 +18,20 @@ type Result struct {
 	MemoryKb int
 }
 
+var uidCounter uint32 = 10000
+
 func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string, args ...string) (Result, error) {
+	uniqueUID := atomic.AddUint32(&uidCounter, 1)
+	if uniqueUID > 60000 {
+		atomic.StoreUint32(&uidCounter, 10000)
+	}
+	uidStr := strconv.Itoa(int(uniqueUID))
+
 	nsjailArgs := []string{
 		"-Q",
 		"-Mo",
+		"--user", uidStr,
+		"--group", uidStr,
 		"--chroot", "/",
 		"--cwd", "/run",
 		"-E", "PATH=/usr/bin:/bin:/usr/local/bin",
@@ -31,10 +42,9 @@ func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string
 		"-R", "/etc",
 		"-T", "/tmp",
 		"-B", workDir + ":/run",
-		"--user", "99999",
-		"--group", "99999",
 		"--time_limit", strconv.Itoa(lim.WallTimeS),
 		"--rlimit_as", strconv.Itoa(lim.MemoryKB / 1024),
+		"--rlimit_fsize", "1",
 		"--max_cpus", "1",
 		"--", cmdPath,
 	}
@@ -42,6 +52,8 @@ func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string
 
 	var outB, errB bytes.Buffer
 	cmd := exec.Command("nsjail", nsjailArgs...)
+
+	const MaxOutputSize = 1024 * 1024
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = &outB
 	cmd.Stderr = &errB
@@ -61,9 +73,19 @@ func runInNsjail(workDir string, lim models.Limits, stdin string, cmdPath string
 		}
 	}
 
+	stdoutStr := outB.String()
+	if len(stdoutStr) > MaxOutputSize {
+		stdoutStr = stdoutStr[:MaxOutputSize] + "\n[Output Truncated]"
+	}
+
+	stderrStr := errB.String()
+	if len(stderrStr) > MaxOutputSize {
+		stderrStr = stderrStr[:MaxOutputSize] + "\n[Output Truncated]"
+	}
+
 	return Result{
-		Stdout:   outB.String(),
-		Stderr:   errB.String(),
+		Stdout:   stdoutStr,
+		Stderr:   stderrStr,
 		ExitCode: exitCode,
 		TimedOut: timedOut,
 	}, nil

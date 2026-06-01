@@ -4,7 +4,7 @@ set -e
 
 echo "Installing Java..."
 
-apt-get update && apt-get install -y --no-install-recommends \
+apt-get install -y --no-install-recommends \
     openjdk-17-jdk \
     && rm -rf /var/lib/apt/lists/*
 

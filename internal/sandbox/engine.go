@@ -152,14 +152,20 @@ func mergeLimits(reqStep *models.StepConfig, defaults config.Limits) models.Limi
 }
 
 func replacePlaceholders(args []string, source, artifact, flags string) []string {
-	out := make([]string, len(args))
+	var out []string
 	replacer := strings.NewReplacer(
 		"{{source}}", source,
 		"{{artifact}}", artifact,
-		"{{flags}}", flags,
 	)
-	for i, arg := range args {
-		out[i] = replacer.Replace(arg)
+
+	for _, arg := range args {
+		if arg == "{{flags}}" {
+			if flags != "" {
+				out = append(out, strings.Fields(flags)...)
+			}
+			continue
+		}
+		out = append(out, replacer.Replace(arg))
 	}
 	return out
 }

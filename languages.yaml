@@ -1,11 +1,16 @@
 languages:
-  - id: py3
-    name: Python 3
-    source_filename: solution.py
+  - id: c
+    name: C
+    source_filename: solution.c
+    artifact: solution
+    build:
+      cmd: /usr/bin/gcc
+      args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
+      limits: { wall_time_s: 5, memory_kb: 1048576, max_processes: 100 }
+      flag_allowlist: ["-O0","-O1","-O2","-O3","-Wall","-lm"]
     run:
-      cmd: /usr/bin/python3
-      args: ["{{source}}"]
-      limits: { wall_time_s: 9, memory_kb: 102400, max_processes: 100 }
+      cmd: ./{{artifact}}
+      limits: { wall_time_s: 3, memory_kb: 524288, max_processes: 64 }
 
   - id: cpp
     name: C++
@@ -14,8 +19,8 @@ languages:
     build:
       cmd: /usr/bin/g++
       args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
-      limits: { wall_time_s: 3, memory_kb: 1048576, max_processes: 100 }
-      flag_allowlist: ["-O0","-O1","-O2","-O3","-Wall","-Wextra","-std=*"]
+      limits: { wall_time_s: 5, memory_kb: 1048576, max_processes: 100 }
+      flag_allowlist: ["-O0","-O1","-O2","-O3","-Wall","-Wextra","-std=c++17","-std=c++20"]
     run:
       cmd: ./{{artifact}}
       limits: { wall_time_s: 3, memory_kb: 524288, max_processes: 64 }
@@ -27,8 +32,56 @@ languages:
     build:
       cmd: /usr/bin/javac
       args: ["{{flags}}", "{{source}}"]
-      limits: { wall_time_s: 6, memory_kb: 102400, max_processes: 100 }
+      limits: { wall_time_s: 10, memory_kb: 4194304, max_processes: 100 }
     run:
       cmd: /usr/bin/java
       args: ["{{artifact}}"]
-      limits: { wall_time_s: 6, memory_kb: 102400, max_processes: 100 }
+      limits: { wall_time_s: 5, memory_kb: 4194304, max_processes: 100 }
+
+  - id: js
+    name: JavaScript
+    source_filename: solution.js
+    run:
+      cmd: /usr/bin/node
+      args: ["{{source}}"]
+      limits: { wall_time_s: 5, memory_kb: 1048576, max_processes: 100 }
+
+  - id: py3
+    name: Python 3
+    source_filename: solution.py
+    run:
+      cmd: /usr/bin/python3
+      args: ["{{source}}"]
+      limits: { wall_time_s: 9, memory_kb: 102400, max_processes: 100 }
+
+  - id: verilog
+    name: Verilog
+    source_filename: solution.v
+    artifact: solution.vvp
+    build:
+      cmd: /usr/bin/iverilog
+      args: ["-o", "{{artifact}}", "{{source}}"]
+      limits: { wall_time_s: 5, memory_kb: 512000, max_processes: 50 }
+    run:
+      cmd: /usr/bin/vvp
+      args: ["{{artifact}}"]
+      limits: { wall_time_s: 5, memory_kb: 256000, max_processes: 50 }
+
+  - id: rust
+    name: Rust
+    source_filename: solution.rs
+    artifact: solution
+    build:
+      cmd: /usr/bin/rustc
+      args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
+      limits: 
+        wall_time_s: 15
+        memory_kb: 1048576 
+        max_processes: 100
+      flag_allowlist: ["-O", "-g", "--edition=2018", "--edition=2021", "opt-level=2", "opt-level=3"]
+    run:
+      cmd: ./{{artifact}}
+      limits: 
+        wall_time_s: 3
+        memory_kb: 128000
+        max_processes: 64

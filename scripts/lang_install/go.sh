@@ -1,0 +1,7 @@
+#!bin/bash
+
+set -e
+apt-get install -y golang-go
+
+go version
+which go

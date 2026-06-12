@@ -26,6 +26,7 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
+RUN chmod +x ./scripts/install.sh && ./scripts/install.sh
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/goboxd ./cmd/goboxd
 
 # ---- Runtime image ----

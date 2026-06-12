@@ -100,6 +100,32 @@ func TestAllLanguages(t *testing.T) {
 				Tests:    []models.TestCase{{ExpectedStdout: "hi"}},
 			},
 		},
+		{
+			name: "Perl Execution",
+			request: models.RunRequest{
+				Language: "perl",
+				Source:   "print 'hi';",
+				Tests:    []models.TestCase{{ExpectedStdout: "hi"}},
+			},
+		},
+		{
+			name: "Ada Execution",
+			request: models.RunRequest{
+				Language:         "ada",
+				Source:           "with Ada.Text_IO; use Ada.Text_IO; procedure solution is begin Put(\"hi\"); end solution;",
+				SourceFilename:   "solution.adb",
+				ArtifactFilename: "solution",
+				Tests:            []models.TestCase{{ExpectedStdout: "hi"}},
+			},
+		},
+		{
+			name: "Go Execution",
+			request: models.RunRequest{
+				Language: "go",
+				Source:   "package main\nimport \"fmt\"\nfunc main() {\n    fmt.Print(\"hi\")\n}",
+				Tests:    []models.TestCase{{ExpectedStdout: "hi"}},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

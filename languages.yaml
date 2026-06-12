@@ -85,3 +85,35 @@ languages:
         wall_time_s: 3
         memory_kb: 128000
         max_processes: 64
+
+  - id: perl
+    name: Perl
+    source_filename: solution.pl
+    run:
+      cmd: /usr/bin/perl
+      args: ["{{source}}"]
+      limits: { wall_time_s: 5, memory_kb: 128000, max_processes: 50 }
+
+  - id: ada
+    name: Ada
+    source_filename: solution.adb
+    artifact: solution
+    build:
+      cmd: /usr/bin/gnatmake
+      args: ["{{source}}", "-o", "{{artifact}}"]
+      limits: { wall_time_s: 15, memory_kb: 524288, max_processes: 100 }
+    run:
+      cmd: ./{{artifact}}
+      limits: { wall_time_s: 3, memory_kb: 128000, max_processes: 64 }
+
+  - id: go
+    name: Go
+    source_filename: main.go
+    artifact: solution
+    build:
+      cmd: /usr/bin/go
+      args: ["build", "-o", "{{artifact}}", "{{source}}"]
+      limits: { wall_time_s: 20, memory_kb: 1048576, max_processes: 100 }
+    run:
+      cmd: ./{{artifact}}
+      limits: { wall_time_s: 3, memory_kb: 1048576, max_processes: 64 }

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# # syntax=docker/dockerfile:1.7
 
 ARG GO_VERSION=1.25
 ARG DEBIAN_VERSION=bookworm
@@ -25,8 +25,9 @@ RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
-COPY . .
+COPY scripts/ ./scripts/
 RUN chmod +x ./scripts/install.sh && ./scripts/install.sh
+COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/goboxd ./cmd/goboxd
 
 # ---- Runtime image ----

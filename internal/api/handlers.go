@@ -3,16 +3,27 @@ package api
 import (
 	"log"
 
+	"time"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/thesouldev/goboxd/internal/models"
 	"github.com/thesouldev/goboxd/internal/sandbox"
 )
+
+var sandboxSem = make(chan struct{}, 6)
 
 func (h *Handler) HandleHealthz(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
 func (h *Handler) HandleRun(c fiber.Ctx) error {
+	select {
+	case sandboxSem <- struct{}{}:
+		defer func() { <-sandboxSem }()
+	case <-time.After(8 * time.Second):
+		return c.Status(503).JSON(errRes("overloaded", "Service is overloaded, please try again later"))
+	}
+
 	req := new(models.RunRequest)
 
 	if err := c.Bind().JSON(req); err != nil {
@@ -27,7 +38,7 @@ func (h *Handler) HandleRun(c fiber.Ctx) error {
 	if !ok {
 		return c.Status(400).JSON(errRes("unsupported_language", "Language is not supported"))
 	}
-	
+
 	buildCmd := "none"
 	if lang.Build != nil {
 		buildCmd = lang.Build.Cmd

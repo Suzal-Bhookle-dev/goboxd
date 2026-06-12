@@ -30,3 +30,6 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Load test intermediate reports
+docs/loadtest/report-*.json

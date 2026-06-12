@@ -1,4 +1,4 @@
 #!/bin/bash
 
-apt-get intall -y perl 
+apt-get install -y perl 
 which perl

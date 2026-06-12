@@ -35,7 +35,7 @@ languages:
       limits: { wall_time_s: 10, memory_kb: 4194304, max_processes: 100 }
     run:
       cmd: /usr/bin/java
-      args: ["{{artifact}}"]
+      args: ["-Xmx180m", "-Xms150m", "-XX:+UseSerialGC", "-XX:-TieredCompilation", "-XX:MaxMetaspaceSize=32m", "{{artifact}}"]
       limits: { wall_time_s: 5, memory_kb: 4194304, max_processes: 100 }
 
   - id: js

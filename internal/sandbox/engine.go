@@ -1,14 +1,47 @@
 package sandbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thesouldev/goboxd/internal/config"
 	"github.com/thesouldev/goboxd/internal/models"
 )
+
+var (
+	buildCache   = make(map[string]string)
+	buildCacheMu sync.RWMutex
+)
+
+func hashSource(source string) string {
+	hash := sha256.Sum256([]byte(source))
+	return hex.EncodeToString(hash[:])
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
 
 func Execute(req models.RunRequest, lang config.Language) (models.RunResponse, error) {
 	tmpDir, err := os.MkdirTemp("", "gobox-")
@@ -41,22 +74,58 @@ func Execute(req models.RunRequest, lang config.Language) (models.RunResponse, e
 			uFlags = strings.Join(req.Build.Flags, " ")
 		}
 
-		buildCmd := replaceString(lang.Build.Cmd, srcFile, artFile, uFlags)
-		args := replacePlaceholders(lang.Build.Args, srcFile, artFile, uFlags)
+		sourceHash := hashSource(req.Source + lang.ID + uFlags)
 
-		res, err := runInNsjail(tmpDir, mergeLimits(req.Build, lang.Build.Limits), "", buildCmd, args...)
+		buildCacheMu.RLock()
+		cachedArtifactPath, cacheHit := buildCache[sourceHash]
+		buildCacheMu.RUnlock()
 
 		bStatus := "ok"
-		if err != nil {
-			bStatus = "internal_error"
-		} else if res.ExitCode != 0 {
-			bStatus = "failed"
+		var stdout, stderr string
+
+		if cacheHit {
+			cachedFileName := filepath.Base(cachedArtifactPath)
+			err = copyFile(cachedArtifactPath, filepath.Join(tmpDir, cachedFileName))
+			if err != nil {
+				bStatus = "internal_error"
+				stderr = err.Error()
+			}
+		} else {
+			buildCmd := replaceString(lang.Build.Cmd, srcFile, artFile, uFlags)
+			args := replacePlaceholders(lang.Build.Args, srcFile, artFile, uFlags)
+
+			res, err := runInNsjail(tmpDir, mergeLimits(req.Build, lang.Build.Limits), "", buildCmd, args...)
+
+			if err != nil {
+				bStatus = "internal_error"
+			} else if res.ExitCode != 0 {
+				bStatus = "failed"
+			} else {
+				// Find the actual compiled artifact
+				artifactFile := artFile
+				if _, statErr := os.Stat(filepath.Join(tmpDir, artFile)); os.IsNotExist(statErr) {
+					// Java produces .class files
+					if _, statErr := os.Stat(filepath.Join(tmpDir, artFile+".class")); statErr == nil {
+						artifactFile = artFile + ".class"
+					}
+				}
+
+				cacheDir, _ := os.MkdirTemp("", "gobox-cache-")
+				cachedPath := filepath.Join(cacheDir, artifactFile)
+				copyFile(filepath.Join(tmpDir, artifactFile), cachedPath)
+
+				buildCacheMu.Lock()
+				buildCache[sourceHash] = cachedPath
+				buildCacheMu.Unlock()
+			}
+			stdout = res.Stdout
+			stderr = res.Stderr
 		}
 
 		response.Build = &models.StepResult{
 			Status:     bStatus,
-			Stdout:     res.Stdout,
-			Stderr:     res.Stderr,
+			Stdout:     stdout,
+			Stderr:     stderr,
 			DurationMs: time.Since(start).Milliseconds(),
 		}
 
